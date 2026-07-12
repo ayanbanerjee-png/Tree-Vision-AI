@@ -1,0 +1,12 @@
+{
+  "best_val_acc": 0.5888888888888889,
+  "best_val_epoch": 4,
+  "stopped_early": true,
+  "epochs_run": 9,
+  "final_train_acc": 0.9881023200475907,
+  "final_val_acc": 0.5805555555555556,
+  "test_acc_top1": 0.554016620498615,
+  "test_acc_top3": 0.7451523545706371,
+  "num_classes": 25,
+  "pretrained_model": "tf_efficientnetv2_s.in1k"
+}

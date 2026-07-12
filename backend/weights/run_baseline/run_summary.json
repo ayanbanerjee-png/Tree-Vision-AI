@@ -1,0 +1,10 @@
+{
+  "best_val_acc": 0.5863013698630137,
+  "best_val_epoch": 13,
+  "final_train_acc": 0.9947152084556665,
+  "final_val_acc": 0.5753424657534246,
+  "test_acc_top1": 0.5808219178082191,
+  "test_acc_top3": 0.7452054794520548,
+  "num_classes": 25,
+  "pretrained_used": "unknown"
+}
