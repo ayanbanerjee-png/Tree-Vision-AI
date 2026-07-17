@@ -61,3 +61,16 @@ backend/weights/species_centroids_data.pkl
 backend/weights/*.pkl
 backend/weights/*.pt
 backend/weights/*.pth
+
+# SQLite Databases
+*.db
+*.db-shm
+*.db-wal
+
+# Local Data / Scratch files
+data/
+scratch/
+.agents/
+backend/demo_candidates/
+backend/demo_final/
+backend/models/diagnostics/

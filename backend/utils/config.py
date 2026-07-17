@@ -6,6 +6,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 WEIGHTS_DIR = os.path.join(BASE_DIR, "weights")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
+DB_PATH = os.path.join(BASE_DIR, "treevision.db")
 
 # Ensure directories exist
 for directory in [WEIGHTS_DIR, UPLOADS_DIR, TEMP_DIR]:

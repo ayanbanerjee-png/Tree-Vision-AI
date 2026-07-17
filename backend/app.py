@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 # Import the orchestrator and config
 from backend.predict import predict_tree
 from backend.utils.config import DEVICE, MODEL_WEIGHTS, TEMP_DIR
+from backend.database import insert_prediction, get_all_predictions
 
 # Define Debug Mode flag (uses wildcards for CORS if True)
 DEBUG_MODE = os.getenv("TREEVISION_DEBUG", "True").lower() == "true"
@@ -60,6 +61,36 @@ class PredictionResponse(BaseModel):
     processing_time_ms: int = Field(..., description="Total execution time of the inference pipeline")
     ood_check: Optional[OODCheckResponse] = Field(None, description="Out-of-distribution species detection results")
     used_cropped_region: bool = Field(False, description="True if the final prediction came from a cropped sub-region rather than the full image")
+    tree_detector_used: bool = Field(False, description="True if the target tree detector succeeded and cropped the region")
+    tree_detector_status: str = Field("detector_unavailable", description="Status of the target tree detector check")
+    multiple_trees_detected: bool = Field(False, description="True if multiple target tree candidates were detected")
+    tree_candidate_count: int = Field(0, description="Total number of target tree candidates detected")
+
+class SavedPredictionResponse(BaseModel):
+    id: int
+    request_id: str
+    timestamp: str
+    filename: Optional[str] = None
+    species: str
+    raw_species: str
+    confidence: float
+    species_group: str
+    health: str
+    age: str
+    foliage: str
+    image_quality: str
+    occlusion: str
+    needs_review: bool
+    processing_time_ms: int
+    used_cropped_region: bool
+    tree_detector_used: bool
+    tree_detector_status: str
+    multiple_trees_detected: bool
+    tree_candidate_count: int
+    ood_similarity: Optional[float] = None
+    ood_nearest_species: Optional[str] = None
+    review_status: str
+
 
 class HealthResponse(BaseModel):
     status: str
@@ -89,14 +120,13 @@ async def predict_single(image: UploadFile = File(..., description="Upload tree 
     """
     Accepts a single image upload, runs the full ML classification and diagnostic pipeline, and returns the result.
     """
-    request_id = str(uuid.uuid4())[:8]
-    print(f"\n[INFO] [app.py] POST /predict - Received file: {image.filename} - Request ID: {request_id}")
+    print(f"\n[INFO] [app.py] POST /predict - Received file: {image.filename}")
     
     # 1. Validate image format extension
     ext = os.path.splitext(image.filename)[1].lower()
     if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
         error_msg = f"Unsupported image format: '{ext}'. Use JPG, JPEG, PNG, or WebP."
-        print(f"[ERROR] Request ID: {request_id} - {error_msg}")
+        print(f"[ERROR] - {error_msg}")
         raise HTTPException(status_code=400, detail=error_msg)
         
     # 2. Save temporary upload file
@@ -109,15 +139,24 @@ async def predict_single(image: UploadFile = File(..., description="Upload tree 
             
         # 3. Call execution pipeline orchestrator
         result = predict_tree(temp_file_path)
+        
+        request_id = result.get("request_id")
+        
+        # 4. Save metadata to database (non-blocking)
+        try:
+            insert_prediction(request_id, image.filename, result)
+        except Exception as db_err:
+            print(f"[WARNING] Database write failed: {db_err}")
+            
         return PredictionResponse(**result)
         
     except Exception as e:
-        error_msg = f"Prediction failed for request {request_id}: {str(e)}"
-        print(f"[ERROR] Request ID: {request_id} - {error_msg}")
+        error_msg = f"Prediction failed: {str(e)}"
+        print(f"[ERROR] - {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
         
     finally:
-        # 4. Assured cleanup: Delete temporary file
+        # 5. Assured cleanup: Delete temporary file
         if os.path.exists(temp_file_path):
             try:
                 os.remove(temp_file_path)
@@ -236,8 +275,8 @@ async def predict_batch(files: List[UploadFile] = File(..., description="Upload 
     """
     Accepts multiple tree images and processes them sequentially using the predict pipeline.
     """
-    request_id = str(uuid.uuid4())[:8]
-    print(f"\n[INFO] [app.py] POST /predict-batch - Received {len(files)} files - Request ID: {request_id}")
+    batch_id = str(uuid.uuid4())[:8]
+    print(f"\n[INFO] [app.py] POST /predict-batch - Received {len(files)} files - Batch ID: {batch_id}")
     
     results = []
     for file in files:
@@ -245,7 +284,7 @@ async def predict_batch(files: List[UploadFile] = File(..., description="Upload 
         ext = os.path.splitext(file.filename)[1].lower()
         if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
             error_msg = f"File {file.filename} skipped: Unsupported format '{ext}'."
-            print(f"[WARNING] Request ID: {request_id} - {error_msg}")
+            print(f"[WARNING] Batch ID: {batch_id} - {error_msg}")
             continue
             
         # Temp save
@@ -258,6 +297,14 @@ async def predict_batch(files: List[UploadFile] = File(..., description="Upload 
                 
             # Process single
             res = predict_tree(temp_file_path)
+            
+            # Read request_id from result and insert prediction
+            file_request_id = res.get("request_id")
+            try:
+                insert_prediction(file_request_id, file.filename, res)
+            except Exception as db_err:
+                print(f"[WARNING] Batch db insert failed: {db_err}")
+                
             results.append(PredictionResponse(**res))
         except Exception as e:
             print(f"[ERROR] Batch item prediction failed for {file.filename}: {e}")
@@ -308,3 +355,12 @@ async def model_info():
         device=str(DEVICE),
         version="1.0"
     )
+
+@app.get("/predictions", response_model=List[SavedPredictionResponse], tags=["Inference"])
+async def list_predictions(limit: int = 100):
+    """
+    Retrieve historical tree prediction records from the database.
+    """
+    records = get_all_predictions(limit=limit)
+    return [SavedPredictionResponse(**r) for r in records]
+

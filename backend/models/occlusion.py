@@ -36,7 +36,23 @@ def load_yolo_model():
 # Initialize model on import
 load_yolo_model()
 
-def detect_occlusion(image_path: str, conf_threshold: float = 0.4) -> dict:
+def box_overlap(box1, box2):
+    """
+    Computes overlap fraction: intersection area divided by box1 area.
+    """
+    x_left = max(box1[0], box2[0])
+    y_top = max(box1[1], box2[1])
+    x_right = min(box1[2], box2[2])
+    y_bottom = min(box1[3], box2[3])
+
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+
+    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+    b1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    return intersection_area / b1_area if b1_area > 0 else 0.0
+
+def detect_occlusion(image_path: str, conf_threshold: float = 0.4, target_tree_box: list = None) -> dict:
     """
     Detect image occlusion using YOLOv8, preserving the exact behavior of Notebook 08.
     """
@@ -74,6 +90,12 @@ def detect_occlusion(image_path: str, conf_threshold: float = 0.4) -> dict:
             continue
             
         x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+        
+        # Filter to only objects overlapping target_tree_box (if provided)
+        if target_tree_box is not None:
+            if box_overlap([x1, y1, x2, y2], target_tree_box) <= 0.05:
+                continue
+
         box_area = (x2 - x1) * (y2 - y1)
         area_frac = box_area / frame_area
         
