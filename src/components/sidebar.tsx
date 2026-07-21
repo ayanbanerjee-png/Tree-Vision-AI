@@ -14,7 +14,8 @@ import {
   Menu, 
   X, 
   Cpu, 
-  Trees 
+  Trees,
+  ClipboardCheck
 } from 'lucide-react';
 import { useTheme } from './theme-provider';
 
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: '/batch', label: 'Batch Analysis', icon: Layers },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/history', label: 'History', icon: History },
+  { href: '/review', label: 'Auditor Review', icon: ClipboardCheck },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 # Import the orchestrator and config
 from backend.predict import predict_tree
 from backend.utils.config import DEVICE, MODEL_WEIGHTS, TEMP_DIR
-from backend.database import insert_prediction, get_all_predictions
+from backend.database import insert_prediction, get_all_predictions, get_review_queue, submit_prediction_review
 
 # Define Debug Mode flag (uses wildcards for CORS if True)
 DEBUG_MODE = os.getenv("TREEVISION_DEBUG", "True").lower() == "true"
@@ -90,6 +90,23 @@ class SavedPredictionResponse(BaseModel):
     ood_similarity: Optional[float] = None
     ood_nearest_species: Optional[str] = None
     review_status: str
+    # Human-review override fields (None = not yet reviewed or field not overridden)
+    reviewed_species: Optional[str] = None
+    reviewed_health: Optional[str] = None
+    reviewed_age: Optional[str] = None
+    reviewed_foliage: Optional[str] = None
+    reviewed_at: Optional[str] = None
+
+
+class ReviewSubmitRequest(BaseModel):
+    review_status: str = Field(
+        ...,
+        description="Auditor decision: must be 'approved' or 'rejected'"
+    )
+    species: Optional[str] = Field(None, description="Reviewer-corrected species label (leave null to keep ML output)")
+    health: Optional[str] = Field(None, description="Reviewer-corrected health label")
+    age: Optional[str] = Field(None, description="Reviewer-corrected age label")
+    foliage: Optional[str] = Field(None, description="Reviewer-corrected foliage label")
 
 
 class HealthResponse(BaseModel):
@@ -364,3 +381,57 @@ async def list_predictions(limit: int = 100):
     records = get_all_predictions(limit=limit)
     return [SavedPredictionResponse(**r) for r in records]
 
+@app.get("/history", response_model=List[SavedPredictionResponse], tags=["Inference"])
+async def get_history(limit: int = 100):
+    """
+    Retrieve historical tree prediction records from the database.
+    """
+    records = get_all_predictions(limit=limit)
+    return [SavedPredictionResponse(**r) for r in records]
+
+
+@app.get("/review-queue", response_model=List[SavedPredictionResponse], tags=["Human Review"])
+async def get_review_queue_endpoint(limit: int = 100):
+    """
+    Returns all predictions where review_status = 'pending'.
+    Intended for the Auditor Review UI to display items awaiting human judgment.
+    """
+    records = get_review_queue(limit=limit)
+    return [SavedPredictionResponse(**r) for r in records]
+
+
+@app.patch("/predictions/{prediction_id}/review", tags=["Human Review"])
+async def submit_review(prediction_id: int, body: ReviewSubmitRequest):
+    """
+    Accepts a human auditor review decision for a single prediction.
+
+    - review_status must be 'approved' or 'rejected'.
+    - Optional override fields (species, health, age, foliage) are stored in separate
+      reviewed_* columns — the original ML prediction columns are NEVER modified.
+    - A review failure returns a 422/500 error to the frontend; it does not crash silently.
+    """
+    try:
+        overrides = {
+            "species": body.species,
+            "health":  body.health,
+            "age":     body.age,
+            "foliage": body.foliage,
+        }
+        submit_prediction_review(
+            prediction_id=prediction_id,
+            review_status=body.review_status,
+            overrides=overrides,
+        )
+        return {
+            "ok": True,
+            "id": prediction_id,
+            "review_status": body.review_status,
+            "message": f"Review recorded for prediction id={prediction_id}."
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=str(ve))
+    except RuntimeError as re:
+        raise HTTPException(status_code=404, detail=str(re))
+    except Exception as e:
+        print(f"[ERROR] Review write failed for id={prediction_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Review write failed: {str(e)}")

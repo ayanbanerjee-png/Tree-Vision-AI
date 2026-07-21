@@ -1,3 +1,4 @@
+
 # Assumptions & Technical Decisions
 
 This document tracks key architectural assumptions, model constraints, and post-deployment production bug fixes made during the development of the FloCard Tree AI system.

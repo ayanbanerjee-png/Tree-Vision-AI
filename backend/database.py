@@ -54,8 +54,44 @@ def init_db():
     finally:
         conn.close()
 
+def migrate_db():
+    """
+    Self-healing migration: adds reviewed_* columns to the predictions table if they
+    do not yet exist. Safe to call on every startup — ALTER TABLE is skipped if the
+    column is already present.
+
+    New columns added:
+        reviewed_species  TEXT  -- human-corrected species label (preserves original 'species')
+        reviewed_health   TEXT  -- human-corrected health label (preserves original 'health')
+        reviewed_age      TEXT  -- human-corrected age label (preserves original 'age')
+        reviewed_foliage  TEXT  -- human-corrected foliage label (preserves original 'foliage')
+        reviewed_at       TEXT  -- ISO-8601 UTC timestamp of review submission
+    """
+    NEW_COLUMNS = [
+        ("reviewed_species", "TEXT"),
+        ("reviewed_health",  "TEXT"),
+        ("reviewed_age",     "TEXT"),
+        ("reviewed_foliage", "TEXT"),
+        ("reviewed_at",      "TEXT"),
+    ]
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(predictions);")
+        existing_cols = {row["name"] for row in cursor.fetchall()}
+        for col_name, col_type in NEW_COLUMNS:
+            if col_name not in existing_cols:
+                cursor.execute(f"ALTER TABLE predictions ADD COLUMN {col_name} {col_type};")
+                print(f"[INFO] Migration: added column '{col_name}' to predictions table.")
+        conn.commit()
+    except Exception as e:
+        print(f"[ERROR] Migration failed: {e}")
+    finally:
+        conn.close()
+
 # Auto-initialize on module load to ensure DB is ready immediately
 init_db()
+migrate_db()
 
 def insert_prediction(request_id: str, filename: str, response_dict: dict) -> None:
     """
@@ -153,3 +189,84 @@ def get_all_predictions(limit: int = 100) -> list:
     except Exception as e:
         print(f"[ERROR] Failed to query predictions: {e}")
         return []
+
+def get_review_queue(limit: int = 100) -> list:
+    """
+    Query the database for predictions where review_status = 'pending'.
+    Returns the same dict shape as get_all_predictions().
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM predictions
+            WHERE review_status = 'pending'
+            ORDER BY id DESC
+            LIMIT ?;
+        """, (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        results = []
+        for row in rows:
+            r = dict(row)
+            r["needs_review"]          = bool(r["needs_review"])
+            r["used_cropped_region"]    = bool(r["used_cropped_region"])
+            r["tree_detector_used"]     = bool(r["tree_detector_used"])
+            r["multiple_trees_detected"]= bool(r["multiple_trees_detected"])
+            results.append(r)
+        return results
+    except Exception as e:
+        print(f"[ERROR] Failed to query review queue: {e}")
+        return []
+
+def submit_prediction_review(
+    prediction_id: int,
+    review_status: str,
+    overrides: dict
+) -> None:
+    """
+    Update a prediction row with auditor review decision and optional field overrides.
+
+    Original ML columns (species, health, age, foliage, confidence, raw_species) are
+    NEVER overwritten. Human corrections are written to the separate reviewed_* columns
+    so both model output and human judgment are preserved for future analysis.
+
+    Raises ValueError on invalid review_status.
+    Raises RuntimeError if the row does not exist.
+    Propagates sqlite3.Error on write failures — caller wraps in try/except.
+    """
+    if review_status not in ("approved", "rejected"):
+        raise ValueError(f"Invalid review_status '{review_status}'. Must be 'approved' or 'rejected'.")
+
+    reviewed_at = datetime.utcnow().isoformat()
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        # Verify row exists
+        cursor.execute("SELECT id FROM predictions WHERE id = ?;", (prediction_id,))
+        if cursor.fetchone() is None:
+            raise RuntimeError(f"Prediction id={prediction_id} not found in database.")
+
+        cursor.execute("""
+            UPDATE predictions
+            SET review_status    = ?,
+                reviewed_species = ?,
+                reviewed_health  = ?,
+                reviewed_age     = ?,
+                reviewed_foliage = ?,
+                reviewed_at      = ?
+            WHERE id = ?;
+        """, (
+            review_status,
+            overrides.get("species"),
+            overrides.get("health"),
+            overrides.get("age"),
+            overrides.get("foliage"),
+            reviewed_at,
+            prediction_id,
+        ))
+        conn.commit()
+        print(f"[INFO] Review submitted for id={prediction_id}: status={review_status}")
+    finally:
+        conn.close()
