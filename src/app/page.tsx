@@ -205,7 +205,7 @@ export default function LandingPage() {
               <div>
                 <h4 className="font-outfit font-bold text-slate-800 dark:text-zinc-100">Species Taxonomy</h4>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                  Recognizes broadleaf, evergreen, conifer, and fruit tree species automatically with percentage-based scoring.
+                  Recognizes broadleaf, conifer, fruit tree, palm, and shrub species automatically with percentage-based scoring.
                 </p>
               </div>
             </Card>
@@ -217,7 +217,7 @@ export default function LandingPage() {
               <div>
                 <h4 className="font-outfit font-bold text-slate-800 dark:text-zinc-100">Health Stress Assessment</h4>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                  Detects signs of mild decline, bark damages, and severe disease stress parameters based on foliage density.
+                  Detects signs of stress, damage, and decline using an independently-trained health classifier.
                 </p>
               </div>
             </Card>
