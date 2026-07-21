@@ -227,9 +227,9 @@ export default function LandingPage() {
                 <Zap size={22} />
               </div>
               <div>
-                <h4 className="font-outfit font-bold text-slate-800 dark:text-zinc-100">High-Speed Queuing</h4>
+                <h4 className="font-outfit font-bold text-slate-800 dark:text-zinc-100">Batch Processing</h4>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                  Batch upload entire directories of forest imagery and process them asynchronously in an structured queue layout.
+                  Upload multiple tree photos at once and get concurrent analysis results in a single request.
                 </p>
               </div>
             </Card>
@@ -239,9 +239,9 @@ export default function LandingPage() {
                 <Database size={22} />
               </div>
               <div>
-                <h4 className="font-outfit font-bold text-slate-800 dark:text-zinc-100">GIS Logging Timeline</h4>
+                <h4 className="font-outfit font-bold text-slate-800 dark:text-zinc-100">History Timeline</h4>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                  Filter, search, and store history logs of every analyzed record to compile automated summaries of green covers.
+                  Search and review every past analysis, including auditor corrections, in one chronological log.
                 </p>
               </div>
             </Card>
