@@ -26,6 +26,7 @@ eval_transform = A.Compose([
 _model = None
 _class_names = []
 _species_to_group = {}
+_common_names = {}
 _high_conf_threshold = 0.70
 _med_conf_threshold = 0.40
 
@@ -52,7 +53,7 @@ def load_species_model():
     """
     Loads model state and classification maps at startup.
     """
-    global _model, _class_names, _species_to_group, _high_conf_threshold, _med_conf_threshold
+    global _model, _class_names, _species_to_group, _high_conf_threshold, _med_conf_threshold, _common_names
     
     weights_path = MODEL_WEIGHTS["species"]
     label_map_path = MODEL_WEIGHTS["label_map"]
@@ -79,6 +80,13 @@ def load_species_model():
         _class_names = label_map['classes']
         _species_to_group = label_map['species_to_group']
         num_classes = label_map['num_classes']
+
+    # common_names always comes from the JSON file, independent of checkpoint path,
+    # since the production checkpoint doesn't embed it and re-saving a working
+    # checkpoint on demo day isn't worth the risk.
+    with open(label_map_path, 'r') as f:
+        label_map = json.load(f)
+    _common_names = label_map.get('common_names', {})
         
     # Recreate the exact network architecture
     _model = build_model(
@@ -102,7 +110,7 @@ def predict_species(image_path: str) -> dict:
     """
     Full confidence-gated species prediction, preserving exact behavior of Notebook 03.
     """
-    global _model, _class_names, _species_to_group, _high_conf_threshold, _med_conf_threshold
+    global _model, _class_names, _species_to_group, _high_conf_threshold, _med_conf_threshold, _common_names
     
     # 1. Load image and apply transforms exactly as in Notebook 03
     img = np.array(Image.open(image_path).convert('RGB'))
@@ -118,20 +126,37 @@ def predict_species(image_path: str) -> dict:
     species_pred = _class_names[top_idx.item()]
     group_pred   = _species_to_group.get(species_pred, 'unknown')
 
+    # Format species name with common name if available, e.g., "Mango (Mangifera indica)"
+    if species_pred in _common_names:
+        formatted_scientific = species_pred.replace("_", " ")
+        display_name = f"{_common_names[species_pred]} ({formatted_scientific})"
+    else:
+        display_name = species_pred
+
     # Top-5 list for backend display
     topk_probs, topk_idx = torch.topk(probs, k=min(5, len(probs)))
-    top_predictions = [
-        {
-            "species": _class_names[idx.item()],
+    top_predictions = []
+    raw_top_predictions = []
+    for idx, prob in zip(topk_idx, topk_probs):
+        raw_name = _class_names[idx.item()]
+        if raw_name in _common_names:
+            formatted_scientific = raw_name.replace("_", " ")
+            formatted_name = f"{_common_names[raw_name]} ({formatted_scientific})"
+        else:
+            formatted_name = raw_name
+        top_predictions.append({
+            "species": formatted_name,
             "confidence": round(prob.item() * 100, 2)  # percentage
-        }
-        for idx, prob in zip(topk_idx, topk_probs)
-    ]
+        })
+        raw_top_predictions.append({
+            "species": raw_name,
+            "confidence": round(prob.item() * 100, 2)
+        })
 
     # Map decision levels based on thresholds
     if top_prob >= _high_conf_threshold:
         confidence_level = 'high'
-        display_label = species_pred
+        display_label = display_name
     elif top_prob >= _med_conf_threshold:
         confidence_level = 'medium'
         display_label = f'{group_pred} — uncertain species'
@@ -146,4 +171,5 @@ def predict_species(image_path: str) -> dict:
         'confidence_level': confidence_level,
         'display_label'   : display_label,
         'top_predictions' : top_predictions,
+        'raw_top_predictions': raw_top_predictions,
     }

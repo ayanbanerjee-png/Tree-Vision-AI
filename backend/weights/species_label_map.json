@@ -53,5 +53,32 @@
     "Ficus_religiosa": "broadleaf",
     "Cedrus_deodara": "conifer"
   },
+  "common_names": {
+    "Aegle_marmelos": "Bael",
+    "Azadirachta_indica": "Neem",
+    "Borassus_flabellifer": "Palmyra Palm",
+    "Butea_monosperma": "Flame of the Forest",
+    "Calotropis_procera": "Aak",
+    "Cassia_fistula": "Golden Shower Tree",
+    "Cedrus_deodara": "Deodar Cedar",
+    "Cocos_nucifera": "Coconut",
+    "Cupressus_torulosa": "Himalayan Cypress",
+    "Dalbergia_sissoo": "Shisham",
+    "Eucalyptus_globulus": "Blue Gum Eucalyptus",
+    "Ficus_benghalensis": "Banyan",
+    "Ficus_religiosa": "Peepal",
+    "Lantana_camara": "Lantana",
+    "Mangifera_indica": "Mango",
+    "Moringa_oleifera": "Drumstick Tree",
+    "Phoenix_dactylifera": "Date Palm",
+    "Pinus_roxburghii": "Chir Pine",
+    "Pongamia_pinnata": "Karanj",
+    "Saraca_asoca": "Ashoka",
+    "Syzygium_cumini": "Jamun",
+    "Tectona_grandis": "Teak",
+    "Terminalia_arjuna": "Arjun",
+    "Terminalia_bellirica": "Baheda",
+    "Vitex_negundo": "Nirgundi"
+  },
   "num_classes": 25
 }

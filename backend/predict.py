@@ -306,7 +306,14 @@ def predict_tree(image_path: str, input_type: str = "single_tree", request_id: s
                             predicted_species = cand_info["species_result"]["species"]
                             
                             # PATH 3 — Full-frame corroboration:
-                            full_frame_top_species = [p['species'] for p in original_species_result.get('top_predictions', [])]
+                            raw_top_preds = original_species_result.get('raw_top_predictions')
+                            if raw_top_preds is not None:
+                                full_frame_top_species = [p['species'] for p in raw_top_preds]
+                            else:
+                                if original_species_result.get('top_predictions'):
+                                    print("[WARNING] Path 3 corroboration: raw_top_predictions missing, falling back to formatted top_predictions — species comparison may be unreliable.")
+                                full_frame_top_species = [p['species'] for p in original_species_result.get('top_predictions', [])]
+                            
                             path3_satisfied = predicted_species in full_frame_top_species
                             
                             # PATH 2 — Strict single-crop override:
