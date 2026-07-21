@@ -74,3 +74,6 @@ scratch/
 backend/demo_candidates/
 backend/demo_final/
 backend/models/diagnostics/
+
+# vscode IDE config
+.vscode/
