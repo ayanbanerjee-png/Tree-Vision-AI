@@ -175,7 +175,7 @@ export default function BatchPage() {
       // Map raw models outputs back to queue elements
       pendingItems.forEach((item, index) => {
         const rawRes = rawResults[index];
-        if (rawRes) {
+        if (rawRes && rawRes.status !== 'failed') {
           item.status = 'completed';
           item.progress = 100;
           item.result = {
@@ -190,6 +190,7 @@ export default function BatchPage() {
             occlusion: (rawRes.occlusion === 'None' ? 'No' : rawRes.occlusion) as any,
             needsReview: rawRes.needs_review,
             timestamp: new Date().toISOString(),
+            croppedImageUrl: rawRes.cropped_image_url ? `${gatewayUrl.replace(/\/$/, '')}${rawRes.cropped_image_url}` : undefined,
             top5: rawRes.top_predictions.map((p: any) => ({
               species: p.species,
               confidence: p.confidence

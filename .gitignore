@@ -77,3 +77,19 @@ backend/models/diagnostics/
 
 # vscode IDE config
 .vscode/
+
+# Pre-existing workspace folders/files
+dataset_processed/
+models/
+notebooks/
+outputs/
+docs/dataset_sources.md
+docs/decision_log.md
+docs/experiment_log.md
+docs/license_manifest.csv
+docs/project_notes.md
+docs/species.csv
+docs/species_registry.csv
+docs/species_taxonomy.csv
+.ipynb_checkpoints/
+

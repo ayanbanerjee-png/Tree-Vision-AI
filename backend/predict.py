@@ -185,25 +185,12 @@ def predict_tree(image_path: str, input_type: str = "single_tree", request_id: s
         embedding_time = (time.perf_counter() - start_step) * 1000
         print(f"[INFO] DINOv2 Embedding Extraction completed ({embedding_time:.0f} ms)")
 
-        # ── Step 3: Out-of-Distribution (OOD) Species Detection ──
-        start_step = time.perf_counter()
-        ood_result = check_species_ood(embedding)
-        ood_time = (time.perf_counter() - start_step) * 1000
-        print(f"[INFO] OOD Species Detection completed ({ood_time:.0f} ms)")
+        # ── Step 3: Out-of-Distribution (OOD) Species Detection (Bypassed) ──
+        ood_result = None
         
-        # ── Step 4: Species Classification (Gated by OOD check) ──
+        # ── Step 4: Species Classification (OOD Gating Bypassed) ──
         start_step = time.perf_counter()
-        if ood_result['is_recognized_species']:
-            species_result = predict_species(image_path)
-        else:
-            species_result = {
-                'species': 'Unrecognized',
-                'species_group': 'unknown',
-                'confidence': round(ood_result['similarity'] * 100, 2),
-                'confidence_level': 'low',
-                'display_label': f"Unrecognized — not one of the trained species (closest match: {ood_result['nearest_known_species']}, {ood_result['similarity']:.2f} similarity)",
-                'top_predictions': [],
-            }
+        species_result = predict_species(image_path)
         species_time = (time.perf_counter() - start_step) * 1000
         print(f"[INFO] Species Classification completed ({species_time:.0f} ms)")
         
@@ -221,8 +208,8 @@ def predict_tree(image_path: str, input_type: str = "single_tree", request_id: s
         STRICT_SIMILARITY_THRESHOLD = 0.65
         STRICT_MARGIN_THRESHOLD = 0.15
         
-        # Trigger condition: full-frame is OOD or confidence level is not high
-        gating_failed = (not ood_result['is_recognized_species']) or (species_result['confidence_level'] != 'high')
+        # Trigger condition: confidence level is not high (OOD check bypassed)
+        gating_failed = species_result['confidence_level'] != 'high'
         if gating_failed and tree_detector_used:
             print("[INFO] Gating failed, but tree_detector_used=True. Skipping fallback cropping.")
 
@@ -272,28 +259,18 @@ def predict_tree(image_path: str, input_type: str = "single_tree", request_id: s
                         # a. Extract embedding
                         crop_emb = extract_dinov2_embeddings(crop_path)
                         
-                        # b. Run OOD check
-                        crop_ood = check_species_ood(crop_emb)
+                        # b. Run OOD check (Bypassed)
+                        crop_ood = None
                         
-                        # c. Run species classifier ONLY if OOD check passes
-                        if crop_ood['is_recognized_species']:
-                            crop_species = predict_species(crop_path)
-                        else:
-                            crop_species = {
-                                'species': 'Unrecognized',
-                                'species_group': 'unknown',
-                                'confidence': round(crop_ood['similarity'] * 100, 2),
-                                'confidence_level': 'low',
-                                'display_label': f"Unrecognized — not one of the trained species (closest match: {crop_ood['nearest_known_species']}, {crop_ood['similarity']:.2f} similarity)",
-                                'top_predictions': [],
-                            }
+                        # c. Run species classifier directly
+                        crop_species = predict_species(crop_path)
                         
                         cand_info = {
-                            "is_recognized": crop_ood["is_recognized_species"],
+                            "is_recognized": True,
                             "confidence": crop_species["confidence"],
-                            "similarity": crop_ood["similarity"],
+                            "similarity": 1.0,
                             "species_result": crop_species,
-                            "ood_result": crop_ood,
+                            "ood_result": None,
                             "embedding": crop_emb,
                             "path": crop_path,
                             "crop_type": crop_type
@@ -315,12 +292,19 @@ def predict_tree(image_path: str, input_type: str = "single_tree", request_id: s
                                 full_frame_top_species = [p['species'] for p in original_species_result.get('top_predictions', [])]
                             
                             path3_satisfied = predicted_species in full_frame_top_species
+
+                            # Cross-check against the ORIGINAL full-frame OOD gate's nearest-neighbor
+                            # match — None-guarded since original_ood_result is None when OOD is bypassed
+                            ood_nearest_species = original_ood_result.get('nearest_known_species') if original_ood_result else None
+                            ood_agrees = (ood_nearest_species is None) or (ood_nearest_species == predicted_species)
+
+                            if path3_satisfied and not ood_agrees:
+                                print(f"[WARNING] Path 3 corroboration accepted {predicted_species} but full-frame OOD "
+                                      f"nearest neighbor was {ood_nearest_species} — treating as unsatisfied.")
+                                path3_satisfied = False
                             
-                            # PATH 2 — Strict single-crop override:
-                            path2_satisfied = (
-                                cand_info["similarity"] >= STRICT_SIMILARITY_THRESHOLD and 
-                                crop_ood["runner_up_species_gap"] >= STRICT_MARGIN_THRESHOLD
-                            )
+                            # PATH 2 — Strict single-crop override: (Disabled/False when OOD is bypassed)
+                            path2_satisfied = False
                             
                             # PATH 1 — Agreement between two crops:
                             path1_satisfied = False
@@ -347,6 +331,20 @@ def predict_tree(image_path: str, input_type: str = "single_tree", request_id: s
                                 ood_result = cand_info["ood_result"]
                                 embedding = cand_info["embedding"]
                                 used_cropped_region = True
+
+                                # Copy accepted fallback crop to public uploads directory
+                                import uuid as _uuid
+                                import shutil as _shutil
+                                from backend.utils.config import UPLOADS_DIR
+                                public_crops_dir = os.path.join(UPLOADS_DIR, "crops")
+                                os.makedirs(public_crops_dir, exist_ok=True)
+                                unique_filename = f"{_uuid.uuid4()}.jpg"
+                                new_crop_path = os.path.join(public_crops_dir, unique_filename)
+                                try:
+                                    _shutil.copy(crop_path, new_crop_path)
+                                    cropped_image_path = new_crop_path
+                                except Exception as copy_err:
+                                    print(f"[WARNING] Failed to copy accepted fallback crop: {copy_err}")
                                 break
                                 
                     except Exception as crop_err:
@@ -391,15 +389,19 @@ def predict_tree(image_path: str, input_type: str = "single_tree", request_id: s
         # (FastAPI endpoints will pass this back as a unified true/false)
         aux_needs_review = False # Will default to false if models are confident
         
-        # Final consolidated review flag
+        # Final consolidated review flag (OOD check bypassed)
         needs_review = (
             quality_needs_review
             or species_needs_review
             or occlusion_needs_review
             or aux_needs_review
-            or not ood_result['is_recognized_species']
         )
         
+        # Construct public URL for the cropped image if a cropped region was used and saved
+        cropped_image_url = None
+        if cropped_image_path and os.path.exists(cropped_image_path):
+            cropped_image_url = f"/uploads/crops/{os.path.basename(cropped_image_path)}"
+
         print("[INFO] Confidence Gating completed")
         
         total_time_ms = (time.perf_counter() - start_total) * 1000
@@ -427,6 +429,7 @@ def predict_tree(image_path: str, input_type: str = "single_tree", request_id: s
             "multiple_trees_detected": multiple_trees_detected,
             "tree_candidate_count": tree_candidate_count,
             "request_id": request_id,
+            "cropped_image_url": cropped_image_url,
         }
     finally:
         if tree_detector_used or tree_detector_status in ("auto_selected", "needs_user_selection"):

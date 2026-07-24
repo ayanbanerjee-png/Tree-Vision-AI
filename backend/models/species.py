@@ -103,6 +103,21 @@ def load_species_model():
     _model.eval()
     print("Species Classification model (EfficientNetV2-S) loaded successfully!")
 
+    # Load calibration threshold directly from calibration.json at runtime
+    calibration_path = MODEL_WEIGHTS.get("calibration")
+    if calibration_path and os.path.exists(calibration_path):
+        try:
+            with open(calibration_path, 'r') as f:
+                calibration_data = json.load(f)
+            _high_conf_threshold = calibration_data.get("recommended_thresholds", {}).get("accept", 0.90)
+            print(f"Loaded high_conf_threshold ({_high_conf_threshold}) from calibration.json at runtime.")
+        except Exception as e:
+            print(f"Warning: could not read calibration.json ({e}). Falling back to 0.90.")
+            _high_conf_threshold = 0.90
+    else:
+        print("Warning: calibration.json path not found. Falling back to 0.90.")
+        _high_conf_threshold = 0.90
+
 # Initialize on import
 load_species_model()
 

@@ -2,14 +2,15 @@ import os
 import shutil
 import uuid
 import time
-from typing import List, Optional
+from typing import List, Optional, Union
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # Import the orchestrator and config
 from backend.predict import predict_tree
-from backend.utils.config import DEVICE, MODEL_WEIGHTS, TEMP_DIR
+from backend.utils.config import DEVICE, MODEL_WEIGHTS, TEMP_DIR, UPLOADS_DIR
 from backend.database import insert_prediction, get_all_predictions, get_review_queue, submit_prediction_review
 
 # Define Debug Mode flag (uses wildcards for CORS if True)
@@ -33,6 +34,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 # ── Pydantic Schemas for OpenAPI/Swagger ───────────────────
 
@@ -59,12 +62,13 @@ class PredictionResponse(BaseModel):
     needs_review: bool = Field(..., description="Consolidated indicator for human auditor attention")
     top_predictions: List[SpeciesPrediction] = Field(..., description="List of top-5 predicted candidate species")
     processing_time_ms: int = Field(..., description="Total execution time of the inference pipeline")
-    ood_check: Optional[OODCheckResponse] = Field(None, description="Out-of-distribution species detection results")
+    ood_check: Optional[OODCheckResponse] = None
     used_cropped_region: bool = Field(False, description="True if the final prediction came from a cropped sub-region rather than the full image")
     tree_detector_used: bool = Field(False, description="True if the target tree detector succeeded and cropped the region")
     tree_detector_status: str = Field("detector_unavailable", description="Status of the target tree detector check")
     multiple_trees_detected: bool = Field(False, description="True if multiple target tree candidates were detected")
     tree_candidate_count: int = Field(0, description="Total number of target tree candidates detected")
+    cropped_image_url: Optional[str] = Field(None, description="URL path of the cropped region if used")
 
 class SavedPredictionResponse(BaseModel):
     id: int
@@ -96,6 +100,12 @@ class SavedPredictionResponse(BaseModel):
     reviewed_age: Optional[str] = None
     reviewed_foliage: Optional[str] = None
     reviewed_at: Optional[str] = None
+    cropped_image_url: Optional[str] = None
+
+class BatchPredictionError(BaseModel):
+    filename: str = Field(..., description="The name of the file that failed processing")
+    error: str = Field(..., description="The error message details")
+    status: str = Field("failed", description="The failure status")
 
 
 class ReviewSubmitRequest(BaseModel):
@@ -180,114 +190,7 @@ async def predict_single(image: UploadFile = File(..., description="Upload tree 
             except Exception as cleanup_err:
                 print(f"[WARNING] Failed to remove temp file {temp_file_path}: {cleanup_err}")
 
-def get_demo_prediction(filename: str, error_msg: str) -> dict:
-    """
-    Returns realistic predictions for demo batch files when their binary payloads are empty,
-    or falls back to an error dictionary for real files that fail to parse.
-    """
-    fn_lower = filename.lower()
-    if "neem" in fn_lower:
-        return {
-            "species": "Neem (Azadirachta indica)",
-            "raw_species": "Neem (Azadirachta indica)",
-            "confidence": 92.4,
-            "species_group": "Meliaceae",
-            "health": "Healthy",
-            "age": "Maturing",
-            "foliage": "Full Canopy",
-            "image_quality": "clear",
-            "occlusion": "None",
-            "needs_review": False,
-            "top_predictions": [
-                {"species": "Neem (Azadirachta indica)", "confidence": 92.4},
-                {"species": "Teak (Tectona grandis)", "confidence": 4.1}
-            ],
-            "processing_time_ms": 120
-        }
-    elif "banyan" in fn_lower:
-        return {
-            "species": "Banyan (Ficus benghalensis)",
-            "raw_species": "Banyan (Ficus benghalensis)",
-            "confidence": 88.5,
-            "species_group": "Moraceae",
-            "health": "Healthy",
-            "age": "Mature",
-            "foliage": "Full Canopy",
-            "image_quality": "clear",
-            "occlusion": "None",
-            "needs_review": False,
-            "top_predictions": [
-                {"species": "Banyan (Ficus benghalensis)", "confidence": 88.5}
-            ],
-            "processing_time_ms": 134
-        }
-    elif "disease" in fn_lower or "rust" in fn_lower:
-        return {
-            "species": "Ash (Fraxinus)",
-            "raw_species": "Ash (Fraxinus)",
-            "confidence": 64.2,
-            "species_group": "Oleaceae",
-            "health": "Stressed",
-            "age": "Mature",
-            "foliage": "Partial Foliage",
-            "image_quality": "clear",
-            "occlusion": "None",
-            "needs_review": True,
-            "top_predictions": [
-                {"species": "Ash (Fraxinus)", "confidence": 64.2}
-            ],
-            "processing_time_ms": 115
-        }
-    elif "mango" in fn_lower:
-        return {
-            "species": "Mango (Mangifera indica)",
-            "raw_species": "Mango (Mangifera indica)",
-            "confidence": 95.1,
-            "species_group": "Anacardiaceae",
-            "health": "Healthy",
-            "age": "Maturing",
-            "foliage": "Full Canopy",
-            "image_quality": "clear",
-            "occlusion": "None",
-            "needs_review": False,
-            "top_predictions": [
-                {"species": "Mango (Mangifera indica)", "confidence": 95.1}
-            ],
-            "processing_time_ms": 98
-        }
-    elif "teak" in fn_lower:
-        return {
-            "species": "Teak (Tectona grandis)",
-            "raw_species": "Teak (Tectona grandis)",
-            "confidence": 97.8,
-            "species_group": "Lamiaceae",
-            "health": "Healthy",
-            "age": "Mature",
-            "foliage": "Full Canopy",
-            "image_quality": "clear",
-            "occlusion": "None",
-            "needs_review": False,
-            "top_predictions": [
-                {"species": "Teak (Tectona grandis)", "confidence": 97.8}
-            ],
-            "processing_time_ms": 140
-        }
-    return {
-        "species": f"Uncertain ({error_msg[:25]})",
-        "raw_species": "Unknown",
-        "confidence": 0.0,
-        "species_group": "Unknown",
-        "health": "Uncertain",
-        "age": "Uncertain",
-        "foliage": "Uncertain",
-        "image_quality": "uncertain",
-        "occlusion": "None",
-        "needs_review": True,
-        "top_predictions": [],
-        "processing_time_ms": 0
-    }
-
-@app.post("/predict-batch", response_model=List[PredictionResponse], tags=["Inference"])
+@app.post("/predict-batch", response_model=List[Union[PredictionResponse, BatchPredictionError]], tags=["Inference"])
 async def predict_batch(files: List[UploadFile] = File(..., description="Upload multiple tree images")):
     """
     Accepts multiple tree images and processes them sequentially using the predict pipeline.
@@ -300,8 +203,9 @@ async def predict_batch(files: List[UploadFile] = File(..., description="Upload 
         # Validate format
         ext = os.path.splitext(file.filename)[1].lower()
         if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
-            error_msg = f"File {file.filename} skipped: Unsupported format '{ext}'."
-            print(f"[WARNING] Batch ID: {batch_id} - {error_msg}")
+            error_msg = f"Unsupported format '{ext}'"
+            print(f"[WARNING] Batch ID: {batch_id} - {file.filename}: {error_msg}")
+            results.append(BatchPredictionError(filename=file.filename, error=error_msg, status="failed"))
             continue
             
         # Temp save
@@ -325,8 +229,7 @@ async def predict_batch(files: List[UploadFile] = File(..., description="Upload 
             results.append(PredictionResponse(**res))
         except Exception as e:
             print(f"[ERROR] Batch item prediction failed for {file.filename}: {e}")
-            fallback_res = get_demo_prediction(file.filename, str(e))
-            results.append(PredictionResponse(**fallback_res))
+            results.append(BatchPredictionError(filename=file.filename, error=str(e), status="failed"))
         finally:
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)

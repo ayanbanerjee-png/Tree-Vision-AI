@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 # Adjust this if your actual data root differs
-PROJECT_ROOT = r"C:\Users\AYAN\Flocard Tree AI\data"
+PROJECT_ROOT = os.getenv("PROJECT_DATA_ROOT", os.path.join(os.path.expanduser("~"), "Flocard Tree AI", "data"))
 
 SCAN_ROOTS = [
     os.path.join(PROJECT_ROOT, "own", "single_tree"),

@@ -1,6 +1,6 @@
 import os
 from ultralytics import YOLO
-from backend.utils.config import WEIGHTS_DIR
+from backend.utils.config import WEIGHTS_DIR, UPLOADS_DIR
 
 # Trained locally per docs/assumptions.md -- 4-class tree target detector
 # (StreetScouting + tree-detection-7fajo, see assumptions doc for full
@@ -148,26 +148,20 @@ def detect_target_tree(image_path: str, conf_threshold: float = DETECTOR_CONF_TH
 
 
 def crop_target_tree_and_save(image_path: str, crop_box: list, request_id: str,
-                                crops_base_dir: str = "/tmp/tree_detector_crops",
+                                crops_base_dir: str = None,
                                 padding_frac: float = 0.05) -> str:
     """
     Crops the target_tree region out of the original image and saves it to a
-    new file, so the rest of the pipeline (which expects a file path) can run
-    on the cropped region unchanged.
-
-    A small padding margin is added around the box (default 5% of box size)
-    since a perfectly tight crop can cut off edge details the classifier
-    relies on (bark texture at the trunk base, leaf tips, etc.).
-
-    Returns the path to the saved crop. Caller is responsible for deleting
-    this file (and the per-request folder) once done -- see cleanup_tree_crop().
+    new file under backend/uploads/crops with a random UUID filename.
     """
     from PIL import Image
     import os as _os
+    import uuid as _uuid
 
-    os.makedirs(crops_base_dir, exist_ok=True)
-    request_dir = _os.path.join(crops_base_dir, request_id)
-    os.makedirs(request_dir, exist_ok=True)
+    if crops_base_dir is None:
+        crops_base_dir = _os.path.join(UPLOADS_DIR, "crops")
+
+    _os.makedirs(crops_base_dir, exist_ok=True)
 
     img = Image.open(image_path)
     img_w, img_h = img.size
@@ -182,15 +176,16 @@ def crop_target_tree_and_save(image_path: str, crop_box: list, request_id: str,
     y2 = min(img_h, y2 + pad_y)
 
     cropped = img.crop((int(x1), int(y1), int(x2), int(y2)))
-    out_path = _os.path.join(request_dir, "target_tree_crop.jpg")
+    # Generate the filename using a UUID as requested
+    unique_filename = f"{_uuid.uuid4()}.jpg"
+    out_path = _os.path.join(crops_base_dir, unique_filename)
     cropped.convert("RGB").save(out_path, quality=95)
 
     return out_path
 
 
-def cleanup_tree_crop(request_id: str, crops_base_dir: str = "/tmp/tree_detector_crops"):
-    """Removes the per-request crop folder created by crop_target_tree_and_save()."""
-    import shutil as _shutil
-    request_dir = os.path.join(crops_base_dir, request_id)
-    if os.path.isdir(request_dir):
-        _shutil.rmtree(request_dir, ignore_errors=True)
+def cleanup_tree_crop(request_id: str, crops_base_dir: str = None):
+    """
+    No-op because crops are saved directly in public uploads to be served to the frontend.
+    """
+    pass

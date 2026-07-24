@@ -22,7 +22,8 @@ MODEL_WEIGHTS = {
     "foliage": os.path.join(WEIGHTS_DIR, "svm_foliage.pkl"),
     "age": os.path.join(WEIGHTS_DIR, "knn_age.pkl"),
     "label_map": os.path.join(WEIGHTS_DIR, "species_label_map.json"),
-    "ood_reference": os.path.join(WEIGHTS_DIR, "species_centroids_data.pkl")
+    "ood_reference": os.path.join(WEIGHTS_DIR, "species_centroids_data.pkl"),
+    "calibration": os.path.join(WEIGHTS_DIR, "calibration.json")
 }
 
 # Supported species labels fallback

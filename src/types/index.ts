@@ -23,6 +23,7 @@ export interface TreeAnalysis {
   needsReview: boolean;
   timestamp: string;
   imageUrl?: string;
+  croppedImageUrl?: string;
   top5: SpeciesPrediction[];
 }
 

@@ -154,8 +154,6 @@ function StyledSelect({
 /** Build a human-readable reason for review from a QueueItem */
 function reviewReason(item: QueueItem): string {
   const reasons: string[] = [];
-  if (item.ood_similarity !== null && item.ood_similarity < 0.50)
-    reasons.push(`OOD: similarity ${(item.ood_similarity * 100).toFixed(0)}%`);
   if (item.confidence < 70) reasons.push(`Low confidence: ${item.confidence.toFixed(1)}%`);
   if (item.image_quality !== 'clear') reasons.push(`Image quality: ${item.image_quality}`);
   if (item.occlusion !== 'None' && item.occlusion !== 'No')
@@ -353,7 +351,6 @@ export default function ReviewPage() {
                       <p className="text-xs font-semibold text-slate-700 dark:text-zinc-200 break-words leading-snug">{item.raw_species ?? item.species}</p>
                       <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">
                         {item.confidence.toFixed(1)}% conf
-                        {item.ood_similarity !== null && ` · ${(item.ood_similarity * 100).toFixed(0)}% OOD sim`}
                       </p>
                     </div>
                     <div>

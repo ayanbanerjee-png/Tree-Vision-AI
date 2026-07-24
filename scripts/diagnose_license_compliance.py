@@ -2,7 +2,7 @@ import os
 import pandas as pd
 
 # Setup paths
-PROJECT_ROOT = r"C:\Users\AYAN\Flocard Tree AI\data"
+PROJECT_ROOT = os.getenv("PROJECT_DATA_ROOT", os.path.join(os.path.expanduser("~"), "Flocard Tree AI", "data"))
 TARGET_DIR = os.path.join(PROJECT_ROOT, "own", "single_tree")
 
 COMPLIANT_LICENSES = {"cc0", "cc-by", "cc-by-sa"}

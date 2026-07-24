@@ -31,8 +31,8 @@ def clean_and_tokenize(name):
     return tokens, nums
 
 def find_dataset_and_csv():
-    workspace = r"c:\Users\AYAN\.gemini\antigravity-ide\scratch\tree-vision-ai"
-    user_dir = r"c:\Users\AYAN"
+    workspace = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    user_dir = os.path.expanduser("~")
     
     dataset_dir = None
     csv_candidates = []
@@ -60,8 +60,8 @@ def find_dataset_and_csv():
             break
             
     if not dataset_dir:
-        # Fallback to known path if search fails
-        dataset_dir = r"c:\Users\AYAN\Flocard Tree AI\data\testing strees"
+        # Fallback to known path if search fails (environment variable or default user path)
+        dataset_dir = os.getenv("TESTING_TREES_DIR", os.path.join(user_dir, "Flocard Tree AI", "data", "testing strees"))
         
     print(f"Resolved 'testing strees' folder path: {dataset_dir}")
     if not os.path.exists(dataset_dir):

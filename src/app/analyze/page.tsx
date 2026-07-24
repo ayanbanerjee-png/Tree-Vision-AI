@@ -158,6 +158,7 @@ export default function AnalyzePage() {
         occlusion: (rawResult.occlusion === 'None' ? 'No' : rawResult.occlusion) as any,
         needsReview: rawResult.needs_review,
         timestamp: new Date().toISOString(),
+        croppedImageUrl: rawResult.cropped_image_url ? `${gatewayUrl.replace(/\/$/, '')}${rawResult.cropped_image_url}` : undefined,
         top5: rawResult.top_predictions.map((p: any) => ({
           species: p.species,
           confidence: p.confidence
@@ -436,6 +437,18 @@ export default function AnalyzePage() {
                       </div>
                     )}
                   </CardHeader>
+                  {analysisResult.croppedImageUrl && (
+                    <div className="px-6 pb-4">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block mb-1.5 font-sans font-semibold">Cropped Specimen Region</span>
+                      <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-slate-100 dark:border-zinc-800 dark:bg-zinc-950 aspect-[4/3] max-h-[220px] flex items-center justify-center">
+                        <img 
+                          src={analysisResult.croppedImageUrl} 
+                          alt="Cropped Tree region" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <CardContent className="space-y-5">
                     <div className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-zinc-800/80">
                       <div>

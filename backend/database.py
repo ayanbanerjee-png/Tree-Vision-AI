@@ -73,6 +73,7 @@ def migrate_db():
         ("reviewed_age",     "TEXT"),
         ("reviewed_foliage", "TEXT"),
         ("reviewed_at",      "TEXT"),
+        ("cropped_image_url", "TEXT"),
     ]
     conn = get_db_connection()
     try:
@@ -129,8 +130,8 @@ def insert_prediction(request_id: str, filename: str, response_dict: dict) -> No
                 species_group, health, age, foliage, image_quality, occlusion, 
                 needs_review, processing_time_ms, used_cropped_region, 
                 tree_detector_used, tree_detector_status, multiple_trees_detected, 
-                tree_candidate_count, ood_similarity, ood_nearest_species
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                tree_candidate_count, ood_similarity, ood_nearest_species, cropped_image_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, (
             request_id,
             timestamp,
@@ -152,7 +153,8 @@ def insert_prediction(request_id: str, filename: str, response_dict: dict) -> No
             multiple_trees_detected,
             response_dict.get("tree_candidate_count"),
             ood_similarity,
-            ood_nearest_species
+            ood_nearest_species,
+            response_dict.get("cropped_image_url")
         ))
         conn.commit()
         conn.close()
